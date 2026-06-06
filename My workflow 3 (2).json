@@ -1,0 +1,678 @@
+{
+  "name": "My workflow 3",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Job Application Pipeline",
+        "formDescription": "Fill in the details below and all 4 agents will run automatically",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Job Title",
+              "placeholder": "e.g. Frontend Developer Intern",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company Name",
+              "placeholder": "e.g. Careem",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company Website URL",
+              "placeholder": "e.g. https://careem.com",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Hiring Manager Email",
+              "placeholder": "e.g. hr@careem.com",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Hiring Manager Name",
+              "placeholder": "e.g. Sara Ahmed (leave blank if unknown)"
+            },
+            {
+              "fieldLabel": "Job Description",
+              "fieldType": "textarea",
+              "placeholder": "Paste the full job description here",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Your CV Text",
+              "fieldType": "textarea",
+              "placeholder": "Paste your full CV as plain text here",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Send the application email",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Yes — send it automatically"
+                  },
+                  {
+                    "option": "No — just show me everything, I'll send manually"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fed11e64-d616-4136-bae9-53ea0104e8eb",
+      "name": "Trigger — Fill Job Details1",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        -448,
+        624
+      ],
+      "webhookId": "5a16239c-64c2-4125-9873-25bbfb0b39e4",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json['Company Website URL'] }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "197af4bd-5d88-4326-9a55-beaf920edb9c",
+      "name": "Agent 1a — Scrape Company Website1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const getContent = (json) => \n  json?.output?.[0]?.content?.[0]?.text ||\n  json?.message?.content || \n  json?.content?.[0]?.text || \n  json?.text || \n  '';\n\nconst allItems = $input.all();\n\nlet companyIntel = '', resumeFeedback = '', coverLetter = '', emailContent = '';\n\nfor (const item of allItems) {\n  const content = getContent(item.json);\n  if (!content) continue;\n  \n  if (content.includes('WHAT THEY DO') || content.includes('TALKING POINTS')) {\n    companyIntel = content;\n  } else if (content.includes('SUITABILITY SCORE') || content.includes('STRONG MATCHES')) {\n    resumeFeedback = content;\n  } else if (content.includes('SUBJECT:') && content.includes('BODY:')) {\n    emailContent = content;\n  } else if (content.length > coverLetter.length && content.length > 200) {\n    coverLetter = content;\n  }\n}\n\nconst triggerData = $('Trigger — Fill Job Details1').first().json;\n\nconst subjectMatch = emailContent.match(/SUBJECT:\\s*(.+)/i);\nconst bodyMatch = emailContent.match(/BODY:\\s*([\\s\\S]+)/i);\nconst subject = subjectMatch ? subjectMatch[1].trim() : 'Application for ' + triggerData['Job Title'] + ' at ' + triggerData['Company Name'];\nconst body = bodyMatch ? bodyMatch[1].trim() : emailContent;\n\nconst scoreMatch = resumeFeedback.match(/SUITABILITY SCORE[:\\s]+(\\d+)/i);\nconst suitabilityScore = scoreMatch ? scoreMatch[1] + '/10' : 'N/A';\n\nconst sendOption = triggerData['Send the application email'] || '';\nconst sendEmail = sendOption === 'Yes — send it automatically';\n\nconst followUpDate = new Date();\nfollowUpDate.setDate(followUpDate.getDate() + 7);\nconst followUpStr = followUpDate.toISOString().split('T')[0];\n\nreturn [{\n  json: {\n    emailSubject: subject,\n    emailBody: body,\n    companyIntel,\n    resumeFeedback,\n    coverLetter,\n    sendEmail,\n    suitabilityScore,\n    followUpDate: followUpStr,\n    hiringManagerEmail: triggerData['Hiring Manager Email'],\n    jobTitle: triggerData['Job Title'],\n    companyName: triggerData['Company Name'],\n    emailSentStatus: sendEmail ? 'Yes' : 'No',\n    fullDigest: '============================\\n🏢 AGENT 1 — COMPANY INTEL\\n============================\\n' + companyIntel +\n      '\\n\\n============================\\n📊 AGENT 2 — RESUME FEEDBACK\\n============================\\n' + resumeFeedback +\n      '\\n\\n============================\\n📝 AGENT 3 — COVER LETTER\\n============================\\n' + coverLetter +\n      '\\n\\n============================\\n📧 AGENT 4 — APPLICATION EMAIL\\n============================\\nSUBJECT: ' + subject + '\\n\\n' + body\n  }\n}];"
+      },
+      "id": "db41ce1b-de92-4b60-848c-a95da14fa50f",
+      "name": "Compile All Agent Outputs1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.emailSentStatus === 'Yes' ? $json.hiringManagerEmail : 'humna0809@gmail.com' }}",
+        "subject": "={{ $json.emailSubject }}",
+        "message": "=={{ $json.emailBody }}\n\n---\n📝 COVER LETTER\n---\n{{ $json.coverLetter }}\n\n---\n📄 CV / RESUME  \n---\n{{ $('Trigger — Fill Job Details1').first().json['Your CV Text'] }}.",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": []
+          },
+          "senderName": "Humna Khan"
+        }
+      },
+      "id": "a4bde641-c4cc-4ee7-8dc2-e31efe9ccee0",
+      "name": "Agent 4b — Send Application Email1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2176,
+        496
+      ],
+      "webhookId": "92363de8-f857-4abe-a900-596324fb54c0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "A5fISAOcfrDtU75R",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "humna0809@gmail.com",
+        "subject": "=✅ Application Pipeline Done — {{ $json.jobTitle }} at {{ $json.companyName }}",
+        "message": "=Your full application pipeline has run. Here's everything:\n\n{{ $json.fullDigest }}\n\n---\nEmail sent to hiring manager: {{ $json.emailSentStatus }}\nHiring Manager: {{ $json.hiringManagerEmail }}",
+        "options": {
+          "senderName": "Job Application Agent"
+        }
+      },
+      "id": "cc47327c-09ed-43ca-882f-49726c9fa3a9",
+      "name": "Send Full Digest to Yourself1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2400,
+        576
+      ],
+      "webhookId": "9776a805-3d6b-4feb-819e-9d762b4c2125",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "A5fISAOcfrDtU75R",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a company research analyst. Given a company's website content and name, extract the most useful information for a job applicant. Be concise and factual."
+            },
+            {
+              "content": "=Company: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Company Name\"] }}\n\nWebsite content:\n{{ $json.cleanText }}\n\nPlease provide:\n\n🏢 WHAT THEY DO\n- 2-3 sentences on their core product or service\n\n👥 WHO THEY SERVE\n- Their target customers or market\n\n🛠️ TECH STACK / TOOLS (if mentioned)\n- Any technologies, platforms, or tools referenced\n\n🚀 RECENT NEWS OR LAUNCHES (if visible)\n- Anything recent from the site\n\n💡 CULTURE & VALUES (if mentioned)\n- Any mission statements, values, or team culture hints\n\n🎯 TALKING POINTS FOR APPLICATION\n- 3 specific things the applicant should reference to show they know the company"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.3
+        }
+      },
+      "id": "ed600a77-9b8f-4d32-8644-0b2d14021801",
+      "name": "Agent 1b — Analyze Company1",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        496
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "sCWDcDWn16u5izSy",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a senior recruiter and career coach. You analyze CVs against job descriptions and give brutally honest, actionable feedback. Be specific — no generic advice."
+            },
+            {
+              "content": "=Job Title: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Job Title\"] }}\nCompany: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Company Name\"] }}\n\nJob Description:\n{{ $(\"Trigger — Fill Job Details1\").first().json[\"Job Description\"] }}\n\nCandidate CV:\n{{ $(\"Trigger — Fill Job Details1\").first().json[\"Your CV Text\"] }}\n\nProvide:\n\n📊 SUITABILITY SCORE: X/10\n\n✅ STRONG MATCHES\n- List 3-5 specific skills/experiences that align well\n\n⚠️ GAPS & WEAKNESSES\n- List 2-4 missing requirements or weak areas\n\n💡 HOW TO POSITION YOURSELF\n- 3 concrete strategies to frame your experience for this role\n\n🎯 COVER LETTER MUST-HAVES\n- 3 specific points to emphasize based on this analysis"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.3
+        }
+      },
+      "id": "bebdc6bb-a546-47a0-938b-7357c5ba6c25",
+      "name": "Agent 2 — Resume Analyzer1",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        816
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "sCWDcDWn16u5izSy",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert cover letter writer. Write compelling, personalized cover letters that stand out. Use the candidate's voice, be specific, and avoid clichés."
+            },
+            {
+              "content": "=Job Title: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Job Title\"] }}\nCompany: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Company Name\"] }}\nHiring Manager: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Hiring Manager Name\"] || \"Hiring Manager\" }}\nDate:{{ $today }}\nJob Description:\n{{ $(\"Trigger — Fill Job Details1\").first().json[\"Job Description\"] }}\n\nCandidate CV:\n{{ $(\"Trigger — Fill Job Details1\").first().json[\"Your CV Text\"] }}\n\nCompany Intel:\n{{ $(\"Agent 1b — Analyze Company1\").first().json.message?.content || $(\"Agent 1b — Analyze Company1\").first().json.content?.[0]?.text || $(\"Agent 1b — Analyze Company1\").first().json.text || \"\" }}\n\nResume Analysis:\n{{ $(\"Agent 2 — Resume Analyzer1\").first().json.message?.content || $(\"Agent 2 — Resume Analyzer1\").first().json.content?.[0]?.text || $(\"Agent 2 — Resume Analyzer1\").first().json.text || \"\" }}\n\n\nWrite a compelling cover letter (250-350 words) that:\n1. Opens with a hook that shows you know the company\n2. Connects 2-3 specific CV experiences to the job requirements\n3. Addresses any gaps proactively\n4. Shows genuine enthusiasm\n5. Ends with a clear call to action\n\nUse a professional but warm tone. Be specific, not generic."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 800,
+          "temperature": 0.7
+        }
+      },
+      "id": "cfe87a5c-3afe-4fb0-abf9-710e26fb2cb7",
+      "name": "Agent 3 — Cover Letter Writer1",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        800,
+        576
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "sCWDcDWn16u5izSy",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert at writing professional job application emails. Keep them concise, warm, and action-oriented."
+            },
+            {
+              "content": "=Job Title: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Job Title\"] }}\nCompany: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Company Name\"] }}\nHiring Manager: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Hiring Manager Name\"] || \"Hiring Manager\" }}\nCandidate Name: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Your CV Text\"].split(\"\\n\")[0] }}\nCandidate Email: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Your CV Text\"].match(/Email[:\\s]+([^\\s]+@[^\\s]+)/i)?.[1] || \"\" }}\nCandidate Phone: {{ $(\"Trigger — Fill Job Details1\").first().json[\"Your CV Text\"].match(/Phone[:\\s]+([+\\d\\s\\-]+)/i)?.[1]?.trim() || \"\" }}\n\nCover Letter:\n{{ $(\"Agent 3 — Cover Letter Writer1\").first().json.output?.[0]?.content?.[0]?.text || $(\"Agent 3 — Cover Letter Writer1\").first().json.message?.content || $(\"Agent 3 — Cover Letter Writer1\").first().json.content?.[0]?.text || \"\" }}\n\nWrite a short, professional application email (100-150 words) that:\n1. Has a clear subject line (output as \"SUBJECT: ...\" on first line)\n2. Introduces the candidate by name\n3. References the attached CV and cover letter\n4. Expresses enthusiasm for the role\n5. Includes a call to action\n6. Signs off with the candidate's full name, email, and phone number\n\nFormat:\nSUBJECT: [your subject line]\n\nBODY:\n[your email body]\n\n[Candidate Name]\n[Candidate Email]\n[Candidate Phone]"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 400,
+          "temperature": 0.6
+        }
+      },
+      "id": "5b4729f2-aaf6-45b7-83ac-d4821735a6da",
+      "name": "Agent 4a — Write Application Email1",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1152,
+        496
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "sCWDcDWn16u5izSy",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.data || '';\n\n// Strip all HTML tags, collapse whitespace\nconst text = raw\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 3000); // keep first 3000 chars only\n\nreturn [{ json: { cleanText: text } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        496
+      ],
+      "id": "db2218ed-f55b-4174-9ad7-ad538c623a12",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1GAgbFAVR9HPi8coG-ShHBp5VtIcpEiGJML2rSeG6yfc",
+          "mode": "list",
+          "cachedResultName": "Job Applications Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GAgbFAVR9HPi8coG-ShHBp5VtIcpEiGJML2rSeG6yfc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 607052239,
+          "mode": "list",
+          "cachedResultName": "Job Applications Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GAgbFAVR9HPi8coG-ShHBp5VtIcpEiGJML2rSeG6yfc/edit#gid=607052239"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date Applied": "={{ $now.toFormat(\"yyyy-MM-dd\") }}",
+            "Job Title": "={{ $('Compile All Agent Outputs1').first().json.jobTitle }}",
+            "Company": "={{ $('Compile All Agent Outputs1').first().json.companyName }}",
+            "HR Email": "={{ $('Compile All Agent Outputs1').first().json.hiringManagerEmail }}",
+            "Suitability Score": "={{ $('Compile All Agent Outputs1').first().json.suitabilityScore }}",
+            "Email Sent?": "={{ $('Compile All Agent Outputs1').item.json.emailSentStatus }}",
+            "Status": "Applied",
+            "Follow Up Date": "={{ $('Compile All Agent Outputs1').item.json.followUpDate }}",
+            "Notes": "={{ $('Compile All Agent Outputs1').first().json.resumeFeedback.slice(0, 500) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date Applied",
+              "displayName": "Date Applied",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HR Email",
+              "displayName": "HR Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Suitability Score",
+              "displayName": "Suitability Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email Sent?",
+              "displayName": "Email Sent?",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Follow Up Date",
+              "displayName": "Follow Up Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Notes",
+              "displayName": "Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "12c46c88-83fb-4711-89ec-a8987af6047a",
+      "name": "Log to Applications Tracker1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2624,
+        576
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GKLJBZlv5St3lmP0",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "0b99c572-aac8-4b0d-8839-ee76a7a2484a",
+      "name": "Wait for All 4 Agents",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1504,
+        544
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7e07e910-dd47-4199-999f-d9419b68e8e1",
+      "name": "Wait for Agents 1 & 2",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        576,
+        576
+      ]
+    }
+  ],
+  "pinData": {
+    "Trigger — Fill Job Details1": [
+      {
+        "json": {
+          "Job Title": "frontend developer intern",
+          "Company Name": "careem",
+          "Company Website URL": "https://careem.com",
+          "Hiring Manager Email": "humna0809@gmail.com",
+          "Hiring Manager Name": "",
+          "Job Description": "We are looking for a Frontend Developer Intern with experience in React, JavaScript, HTML, CSS, and Git. The candidate should be passionate about building user-friendly web applications and collaborating with cross-functional teams. Responsibilities include developing UI components, fixing bugs, optimizing performance, and participating in code reviews.",
+          "Your CV Text": "Muhammad Hamza\r\nKarachi, Pakistan\r\nEmail: hamza@example.com\r\nPhone: +92-300-1234567\r\n\r\nSUMMARY\r\nAspiring Frontend Developer with experience in React, JavaScript, HTML, CSS, Tailwind CSS, and Git. Built multiple personal projects and contributed to open-source repositories.\r\n\r\nSKILLS\r\n- React.js\r\n- JavaScript (ES6+)\r\n- HTML5 & CSS3\r\n- Tailwind CSS\r\n- Git & GitHub\r\n- REST APIs\r\n\r\nEXPERIENCE\r\nFrontend Developer Intern\r\nABC Tech Solutions\r\nJan 2025 - May 2025\r\n- Developed responsive web interfaces using React.\r\n- Improved page load speed by 20%.\r\n- Collaborated with designers and backend developers.\r\n\r\nEDUCATION\r\nBachelor of Computer Science\r\nUniversity of Karachi\r\nExpected Graduation: 2027",
+          "Send the application email": "Yes — send it automatically",
+          "submittedAt": "2026-06-06T02:35:12.712-07:00",
+          "formMode": "test"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Trigger — Fill Job Details1": {
+      "main": [
+        [
+          {
+            "node": "Agent 1a — Scrape Company Website1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Agent 2 — Resume Analyzer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 1a — Scrape Company Website1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile All Agent Outputs1": {
+      "main": [
+        [
+          {
+            "node": "Agent 4b — Send Application Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 4b — Send Application Email1": {
+      "main": [
+        [
+          {
+            "node": "Send Full Digest to Yourself1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Full Digest to Yourself1": {
+      "main": [
+        [
+          {
+            "node": "Log to Applications Tracker1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 1b — Analyze Company1": {
+      "main": [
+        [
+          {
+            "node": "Wait for All 4 Agents",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait for Agents 1 & 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 2 — Resume Analyzer1": {
+      "main": [
+        [
+          {
+            "node": "Wait for All 4 Agents",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Wait for Agents 1 & 2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Agent 3 — Cover Letter Writer1": {
+      "main": [
+        [
+          {
+            "node": "Agent 4a — Write Application Email1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait for All 4 Agents",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Agent 4a — Write Application Email1": {
+      "main": [
+        [
+          {
+            "node": "Wait for All 4 Agents",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Agent 1b — Analyze Company1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for All 4 Agents": {
+      "main": [
+        [
+          {
+            "node": "Compile All Agent Outputs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Agents 1 & 2": {
+      "main": [
+        [
+          {
+            "node": "Agent 3 — Cover Letter Writer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4aea2643-578b-47d7-9220-5323b658bfc0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "37c4143aa8b237587e130436c73b4f12cb6a15d9db168fbe4797f040e1f435e5"
+  },
+  "nodeGroups": [],
+  "id": "Tbl63JOYovSVbgeD",
+  "tags": []
+}
